@@ -35,7 +35,7 @@ describe("Modbus TCP/IP Client", function () {
 
     var cName = require.resolve('../src/serialClient'),
         hName = require.resolve('../src/handler'),
-	tName = require.resolve('../src/tcpClient');
+	       tName = require.resolve('../src/tcpClient');
 
     delete require.cache[cName];
     delete require.cache[hName];
@@ -149,6 +149,8 @@ describe("Modbus TCP/IP Client", function () {
 
   });
 
+
+
   /**
    *  The actual requests are tested here
    */
@@ -211,6 +213,32 @@ describe("Modbus TCP/IP Client", function () {
             assert.deepEqual(cb.args[0][0], { fc: 4, byteCount: 2, register: [42]});
 
         });
+
+        it("should read holding register just fine", function () {
+
+            var cb = sinon.spy();
+
+            client.readHoldingRegister(0, 1, cb);
+
+            var res = Put()
+                .word16be(0)   // transaction id
+            .word16be(0)   // protocol id
+            .word16be(5)   // length
+            .word8(1)      // unit id
+            .word8(4)      // function code
+            .word8(2)      // byte count
+            .word16be(42)  // register 0 value
+            .buffer();
+
+            socket.emit('data', res);
+
+            assert.ok(cb.called);
+            assert.deepEqual(cb.args[0][0], { fc: 4, byteCount: 2, register: [42]});
+
+        });
+
+
+
 
         it('should handle responses coming in different order just fine', function () {
 
@@ -290,21 +318,43 @@ describe("Modbus TCP/IP Client", function () {
       client.readInputRegister(0, 1, cb);
 
       var res = Put().word16be(0).word16be(0).word16be(3).word8(1) // header
-		 .word8(0x84)  // error code
-	         .word8(1)     // exception code
-		 .buffer();
+  		 .word8(0x84)  // error code
+  	   .word8(1)     // exception code
+  		 .buffer();
 
-      socket.emit('data', res);
+        socket.emit('data', res);
 
-      assert.ok(cb.calledOnce);
-      assert.equal(cb.args[0][0], null);
-      assert.deepEqual(cb.args[0][1], {
-	errorCode: 0x84,
-	exceptionCode: 1,
-	message: 'ILLEGAL FUNCTION' });
+        assert.ok(cb.calledOnce);
+        assert.equal(cb.args[0][0], null);
+        assert.deepEqual(cb.args[0][1], {
+        	errorCode: 0x84,
+        	exceptionCode: 1,
+        	message: 'ILLEGAL FUNCTION' });
 
 
-    });
+      });
+
+    it("should throw an error while reading holding register",function () {
+
+          var cb = sinon.spy();
+
+          client.readHoldingRegister(0, 1, cb);
+
+          var res = Put().word16be(0).word16be(0).word16be(3).word8(1) // header
+           .word8(0x83)  // error code
+           .word8(2)     // exception code
+           .buffer();
+
+            socket.emit('data', res);
+
+            assert.ok(cb.calledOnce);
+            assert.equal(cb.args[0][0], null);
+            assert.deepEqual(cb.args[0][1], {
+              errorCode: 0x83,
+              exceptionCode: 2,
+              message: 'ILLEGAL DATA ADDRESS' });
+                });
+
 
     it('should handle a read coil request', function () {
 
@@ -367,18 +417,18 @@ describe("Modbus TCP/IP Client", function () {
       client.writeSingleCoil(13, false, cb);
 
       var res = Put().word16be(0).word16be(0).word16be(6).word8(1) // header
-		.word8(5)     // function code
-		.word16be(13) // output address
-	        .word16be(0)  // off
-		.buffer();
+  		.word8(5)     // function code
+  		.word16be(13) // output address
+  	  .word16be(0)  // off
+  		.buffer();
 
        socket.emit('data', res);
 
        assert.ok(cb.calledOnce);
        assert.deepEqual(cb.args[0][0], {
-		fc: 5,
-		outputAddress: 13,
-	 	outputValue: false
+		   fc: 5,
+		   outputAddress: 13,
+	 	   outputValue: false
        });
 
 

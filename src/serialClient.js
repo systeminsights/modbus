@@ -71,15 +71,15 @@ var ModbusClient = function (socket, resHandler) {
 
 
 
-                readHoldingRegister: function (start, quantity, cb) {
+        readHoldingRegister: function (start, quantity, cb) {
 
-                    var fc      = 3,
-                        defer   = Q.defer(),
-                        pdu     = that.pduWithTwoParameter(fc, start, quantity);
+            var fc      = 3,
+                defer   = Q.defer(),
+                pdu     = that.pduWithTwoParameter(fc, start, quantity);
 
-                    return that.makeRequest(fc, pdu, !cb?dummy:cb, defer);
+            return that.makeRequest(fc, pdu, !cb?dummy:cb, defer);
 
-                },
+        },
 
 
         readInputRegister: function (start, quantity, cb) {
