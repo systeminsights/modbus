@@ -26,7 +26,7 @@ exports.createTCPClient = function (port, host, cb) {
             return;
         }
 
-        cb(e); 
+        cb(e);
 
     });
 

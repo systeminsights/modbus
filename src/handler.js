@@ -23,6 +23,8 @@ exports.ExceptionMessage = {
 
 exports.FC = {
     readCoils		: 1,
+    readDiscrete : 2,
+    readHoldingRegister : 3,
     readInputRegister	: 4
 };
 
@@ -31,13 +33,14 @@ exports.Server = { };
 /**
  *  Server response handler. Put new function call
  *  responses in here. The parameters for the function
- *  are defined by the handle that has been delivered to 
+ *  are defined by the handle that has been delivered to
  *  the server objects addHandler function.
  */
 exports.Server.ResponseHandler = {
     // read coils
     1 : function (register) {
-            var flr = Math.floor(register.length / 8),
+      //  console.log(register);
+                var flr = Math.floor(register.length / 8),
                 len = register.length % 8 > 0 ? flr + 1 : flr,
                 res = Put().word8(1).word8(len);
 
@@ -52,14 +55,56 @@ exports.Server.ResponseHandler = {
                     }
 
                     cntr += 1;
-                
+
                 }
-            
+
             res.word8(cur);
         }
 
         return res.buffer();
       },
+
+
+  //read input status or discrete
+    2 : function (register) {
+              var flr = Math.floor(register.length / 8),
+                  len = register.length % 8 > 0 ? flr + 1 : flr,
+                  res = Put().word8(1).word8(len);
+
+              var cntr = 0;
+              for (var i = 0; i < len; i += 1 ) {
+                  var cur = 0;
+                  for (var j = 0; j < 8; j += 1) {
+                      var h = 1 << j;
+
+                      if (register[cntr]) {
+                          cur += h;
+                      }
+
+                      cntr += 1;
+
+                  }
+
+              res.word8(cur);
+          }
+
+          return res.buffer();
+        },
+
+
+    // read holding register
+    3: function(register){
+      var res = Put().word8(4).word8(register.length *2);
+
+      for (var i=0;i<register.length;i +=1) {
+        res.word16be(register[i]);
+      }
+
+      return res.buffer();
+
+    },
+
+
     // read input register
     4 : function (register) {
 
@@ -71,6 +116,7 @@ exports.Server.ResponseHandler = {
 
             return res.buffer();
     },
+
     5 : function (outputAddress, outputValue) {
 
             var res = Put().word8(5).word16be(outputAddress)
@@ -79,20 +125,20 @@ exports.Server.ResponseHandler = {
             return res;
         },
     6 : function (outputAddress, outputValue) {
-  
+
             var res = Put().word8(5).word16be(outputAddress).word16be(outputValue).buffer();
 
             return res;
-  
+
         }
 
 };
 
 /**
  *  The RequestHandler on the server side. The
- *  functions convert the incoming pdu to a 
+ *  functions convert the incoming pdu to a
  *  usuable set of parameter that can be handled
- *  from the server objects user handler (see addHandler 
+ *  from the server objects user handler (see addHandler
  *  function in the servers api).
  */
 exports.Server.RequestHandler = {
@@ -105,7 +151,29 @@ exports.Server.RequestHandler = {
                 quantity        = pdu.readUInt16BE(3),
                 param           = [ startAddress, quantity ];
 
-            return param;	
+            return param;
+          //  console.log(param);
+        },
+
+// Read discrete input
+    2 : function (pdu) {
+
+                var fc              = pdu.readUInt8(0), // never used, should just be an example
+                    startAddress    = pdu.readUInt16BE(1),
+                    quantity        = pdu.readUInt16BE(3),
+                    param           = [ startAddress, quantity ];
+
+                return param;
+            },
+
+  // ReadHoldingRegister
+        3 : function (pdu) {
+
+                var startAddress    = pdu.readUInt16BE(1),
+                    quantity        = pdu.readUInt16BE(3),
+                    param           = [ startAddress, quantity ];
+
+                return param;
         },
 
     // ReadInputRegister
@@ -118,7 +186,7 @@ exports.Server.RequestHandler = {
             return param;
     },
     5 : function (pdu) {
-      
+
             var outputAddress   = pdu.readUInt16BE(1),
                 outputValue     = pdu.readUInt16BE(3),
                 boolValue       = outputValue===0xFF00?true:outputValue===0x0000?false:undefined,
@@ -127,13 +195,13 @@ exports.Server.RequestHandler = {
             return param;
         },
     6 : function (pdu) {
-     
+
             var outputAddress   = pdu.readUInt16BE(1),
                 outputValue     = pdu.readUInt16BE(3),
                 param           = [ outputAddress, outputValue ];
 
-            return param; 
-     
+            return param;
+
         }
 };
 
@@ -145,93 +213,123 @@ exports.Client = { };
  *  converts the pdu's delivered from the server
  *  into parameters for the users callback function.
  */
+ readBits = function (pdu, cb, defer) {
+
+         var fc          = pdu.readUInt8(0),
+             byteCount   = pdu.readUInt8(1),
+             bitCount    = byteCount * 8;
+
+         var type = null;
+         //console.log("FC: ", fc);
+         if(fc === 1){
+           type = "coils";
+           log("Handling Coil Status");
+         }
+         else if(fc === 2){
+           type = "discrete";
+           log("Handling Discrete Status");
+         }
+
+         var resp = {
+                 fc          : fc,
+                 byteCount   : byteCount
+             };
+
+         resp[type] = [];
+
+         var cntr = 0;
+         for (var i = 0; i < byteCount; i+=1) {
+             var h = 1, cur = pdu.readUInt8(2 + i);
+             for (var j = 0; j < 8; j+=1) {
+                 resp[type][cntr] = (cur & h) > 0 ;
+                 h = h << 1;
+                 cntr += 1;
+             }
+         }
+
+         cb(resp);
+
+         defer.resolve(resp);
+     }
+
+readregister =  function (pdu, cb, defer) {
+
+        log("handling read holding register response.");
+
+        var fc          = pdu.readUInt8(0),
+            byteCount   = pdu.readUInt8(1);
+
+      var type = null;
+      if(fc === 3){
+        type ="register";
+        log("Handling holding register");
+      }
+      else if(fc === 4){
+        type = "register";
+        log("Handling input register");
+      }
+
+
+
+        var resp = {
+            fc          : fc,
+            byteCount   : byteCount,
+            register    : []
+        };
+        resp[type] = [];
+
+        var registerCount = byteCount / 2;
+
+        for (var i = 0; i < registerCount; i += 1) {
+            resp[type].push(pdu.readUInt16BE(2 + (i * 2)));
+        }
+
+        cb(resp);
+        defer.resolve(resp);
+
+    }
 exports.Client.ResponseHandler = {
     // ReadCoils
-    1 :	function (pdu, cb) {
 
-            log("handeling read coils response.");
+      1 : readBits,
+      2 : readBits,
+      3 : readregister,
+      4 : readregister,
+      5 : function (pdu, cb, defer) {
 
-            var fc          = pdu.readUInt8(0),
-                byteCount   = pdu.readUInt8(1),
-                bitCount    = byteCount * 8;
+              log("handling write single coil response.");
 
-            var resp = {
-                    fc          : fc,
-                    byteCount   : byteCount,
-                    coils       : [] 
-                };
+              var fc              = pdu.readUInt8(0),
+                  outputAddress   = pdu.readUInt16BE(1),
+                  outputValue     = pdu.readUInt16BE(3);
 
-            var cntr = 0;
-            for (var i = 0; i < byteCount; i+=1) {
-                var h = 1, cur = pdu.readUInt8(2 + i);
-                for (var j = 0; j < 8; j+=1) {
-                    resp.coils[cntr] = (cur & h) > 0 ;
-                    h = h << 1;
-                    cntr += 1;
-                } 
-            }
+              var resp = {
+                  fc              : fc,
+                  outputAddress   : outputAddress,
+                  outputValue     : outputValue === 0x0000?false:outputValue===0xFF00?true:undefined
+              };
 
-            cb(resp);
-        },
+              cb(resp);
+              defer.resolve(resp);
 
-    // ReadInputRegister
-    4 : function (pdu, cb) {
-          
-            log("handling read input register response.");
+          },
+      6 : function (pdu, cb, defer) {
 
-            var fc          = pdu.readUInt8(0),
-                byteCount   = pdu.readUInt8(1);
+              log("handling write single register response.");
 
-            var resp = {
-                fc          : fc,
-                byteCount   : byteCount,
-                register    : []
-            };
+              var fc          = pdu.readUInt8(0),
+  		        registerAddress = pdu.readUInt16BE(1),
+  		        registerValue   = pdu.readUInt16BE(3);
 
-            var registerCount = byteCount / 2;
+              var resp = {
+                  fc              : fc,
+                  registerAddress : registerAddress,
+                  registerValue   : registerValue
+              };
 
-            for (var i = 0; i < registerCount; i += 1) {
-                resp.register.push(pdu.readUInt16BE(2 + (i * 2)));
-            }
+              cb(resp);
+              defer.resolve(resp);
 
-            cb(resp);
+          }
 
-        },
-    5 : function (pdu, cb) {
-            
-            log("handling write single coil response.");
-
-            var fc              = pdu.readUInt8(0),
-                outputAddress   = pdu.readUInt16BE(1),
-                outputValue     = pdu.readUInt16BE(3);
-
-            var resp = {
-                fc              : fc,
-                outputAddress   : outputAddress,
-                outputValue     : outputValue === 0x0000?false:outputValue===0xFF00?true:undefined
-            };
-
-            cb(resp);
-
-        },
-    6 : function (pdu, cb) {
-            
-            log("handling write single register response.");
-
-            var fc              = pdu.readUInt8(0),
-		registerAddress = pdu.readUInt16BE(1),
-		registerValue   = pdu.readUInt16BE(3);
-
-            var resp = {
-                fc              : fc,
-                registerAddress : registerAddress,
-                registerValue   : registerValue
-            };
-
-            cb(resp);
-
-        }
-        
 };
-
-

@@ -20,7 +20,7 @@ describe("Modbus TCP/IP Client", function () {
 
     modbusClient = require('../src/serialClient');
     modbusClient.setLogger(dummy);  // shut down the logger
-    
+
     modbusHandler = require('../src/handler');
     modbusHandler.setLogger(dummy); // shut down the logger
 
@@ -36,10 +36,10 @@ describe("Modbus TCP/IP Client", function () {
     var cName = require.resolve('../src/serialClient'),
         hName = require.resolve('../src/handler'),
 	tName = require.resolve('../src/tcpClient');
-    
+
     delete require.cache[cName];
     delete require.cache[hName];
- 
+
     done();
 
   });
@@ -99,7 +99,7 @@ describe("Modbus TCP/IP Client", function () {
       tcpHeader = tcpModbusClient.create(socket);
 
       client = modbusClient.create(
-	    tcpHeader, 
+	    tcpHeader,
 	    modbusHandler.Client.ResponseHandler);
 
       socket.emit('connect');
@@ -178,7 +178,7 @@ describe("Modbus TCP/IP Client", function () {
             tcpHeader = tcpModbusClient.create(socket);
 
             client = modbusClient.create(
-	            tcpHeader, 
+	            tcpHeader,
 	            modbusHandler.Client.ResponseHandler);
 
             socket.emit('connect');
@@ -198,7 +198,7 @@ describe("Modbus TCP/IP Client", function () {
             var res = Put()
                 .word16be(0)   // transaction id
 		        .word16be(0)   // protocol id
-		        .word16be(5)   // length 
+		        .word16be(5)   // length
 		        .word8(1)      // unit id
 		        .word8(4)      // function code
 		        .word8(2)      // byte count
@@ -244,11 +244,11 @@ describe("Modbus TCP/IP Client", function () {
 
             assert.ok(cb.calledTwice);
             assert.deepEqual(
-                cb.args[1][0], { 
+                cb.args[1][0], {
                     fc: 4, byteCount: 2, register: [ 42 ]});
             assert.deepEqual(
-                cb.args[0][0], { 
-                    fc: 4, byteCount: 2, register: [ 43 ]});	
+                cb.args[0][0], {
+                    fc: 4, byteCount: 2, register: [ 43 ]});
 
     });
 
@@ -274,13 +274,13 @@ describe("Modbus TCP/IP Client", function () {
 
       assert.ok(cb.calledTwice);
       assert.deepEqual(cb.args[0][0], { fc: 4, byteCount: 2, register: [ 42 ]});
-      assert.deepEqual(cb.args[1][0], { fc: 4, byteCount: 2, register: [ 43 ]});	
+      assert.deepEqual(cb.args[1][0], { fc: 4, byteCount: 2, register: [ 43 ]});
 
     });
 
 
     /**
-     *  Handle an error response 
+     *  Handle an error response
      */
 
     it("should handle an error while reading input register", function () {
@@ -298,9 +298,9 @@ describe("Modbus TCP/IP Client", function () {
 
       assert.ok(cb.calledOnce);
       assert.equal(cb.args[0][0], null);
-      assert.deepEqual(cb.args[0][1], { 
-	errorCode: 0x84, 
-	exceptionCode: 1, 
+      assert.deepEqual(cb.args[0][1], {
+	errorCode: 0x84,
+	exceptionCode: 1,
 	message: 'ILLEGAL FUNCTION' });
 
 
@@ -324,12 +324,39 @@ describe("Modbus TCP/IP Client", function () {
 
       assert.ok(cb.calledOnce);
       assert.deepEqual(cb.args[0][0], {
-	fc: 1, 
-	byteCount: 3, 
-	coils: [true, false, true, false, true, false, true, false, 
+	fc: 1,
+	byteCount: 3,
+	coils: [true, false, true, false, true, false, true, false,
 		true, false, true, false, true, false, true, false,
 		true, false, false, false, false, false, false, false]
 	});
+
+    });
+
+    it('should handle a read discrete request', function () {
+
+      var cb = sinon.spy();
+
+      client.readDiscrete(0, 17, cb);
+
+      var res = Put().word16be(0).word16be(0).word16be(6).word8(1) // header
+        .word8(2)  // function code
+        .word8(3)  // byte count
+        .word8(85) // bits 0 - 7  = 01010101 = 85
+        .word8(85) // bits 7 - 15 = 01010101 = 85
+        .word8(1)  // bit 16      = 00000001 = 1
+        .buffer();
+
+      socket.emit('data', res);
+
+      assert.ok(cb.calledOnce);
+      assert.deepEqual(cb.args[0][0], {
+      fc: 2,
+      byteCount: 3,
+      discrete: [1, 0, 1, 0, 1, 0, 1, 0,
+        1, 0, 1, 0, 1, 0, 1, 0,
+        1, 0, 0, 0, 0, 0, 0, 0]
+  });
 
     });
 
@@ -366,11 +393,11 @@ describe("Modbus TCP/IP Client", function () {
       var res = Put().word16be(0).word16be(0).word16be(6).word8(1)  // header
 		.word8(5)         // function code
 		.word16be(15)     // output address
-		.word16be(0xFF00) // on 
+		.word16be(0xFF00) // on
 		.buffer();
 
       socket.emit('data', res);
-	
+
       assert.ok(cb.calledOnce);
       assert.deepEqual(cb.args[0][0], {
 	  fc: 5,
